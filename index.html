@@ -21,15 +21,15 @@
         canvas {
             border: 3px solid #444;
             margin-bottom: 20px;
-            width: 800px;
-            height: 480px;
+            width: 900px;
+            height: 540px;
         }
         .controls {
             background-color: #333;
             padding: 15px;
             border-radius: 10px;
             margin-bottom: 20px;
-            width: 800px;
+            width: px;
             text-align: center;
         }
         .difficulty-buttons {
@@ -59,7 +59,7 @@
             font-size: 18px;
             margin-top: 10px;
             color: red;
-            max-width: 800px;
+            max-width: px;
             text-align: center;
         }
         h1 {
@@ -102,7 +102,7 @@
 <body>
     <h1>Juego de Pelea Simple</h1>
     
-    <canvas id="gameCanvas" width="800" height="480"></canvas>
+    <canvas id="gameCanvas" width="900" height="540"></canvas>
     <div id="loadingMessage">Cargando imágenes...</div>
     <div id="errorMessage"></div>
     
@@ -130,8 +130,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const loadingMessage = document.getElementById('loadingMessage');
     const errorMessage = document.getElementById('errorMessage');
     
-    canvas.width = 800;
-    canvas.height = 480;
+    canvas.width = 900;
+    canvas.height = 540;
     
     const GRAVITY = 0.5;
     const GROUND_Y = canvas.height - 30;
@@ -219,7 +219,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return img;
         }
         
-        if (!images.background.complete) images.background = createFallbackImage('#000', 800, 480, "background");
+        if (!images.background.complete) images.background = createFallbackImage('#000', 900, 540, "background");
         if (!images.player.complete) images.player = createFallbackImage('blue', 200, 300, "character");
         if (!images.enemy.complete) images.enemy = createFallbackImage('red', 200, 300, "character");
         if (!images.sword.complete) images.sword = createFallbackImage('lightblue', 100, 100, "weapon");
