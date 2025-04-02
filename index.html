@@ -125,7 +125,7 @@
             padding: 10px;
             background-color: rgba(0, 0, 0, 0.5);
             border-radius: 10px;
-            margin-top: 250px;
+            margin-top: 220px;
         }
         @keyframes pulse {
             0% { opacity: 1; }
@@ -134,6 +134,25 @@
         }
         #gameContent {
             display: none;
+        }
+        /* Estilos para el sistema de puntos */
+        .point-popup {
+            position: absolute;
+            color: yellow;
+            font-size: 20px;
+            font-weight: bold;
+            text-shadow: 2px 2px 2px #000;
+            opacity: 1;
+            transition: opacity 1s, transform 1s;
+        }
+        .combo-display {
+            position: absolute;
+            color: #ff00ff;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px #000;
+            opacity: 1;
+            transition: opacity 0.5s, transform 0.5s;
         }
         @media (max-width: 900px) {
             #mobileControls { display: block; }
@@ -225,6 +244,22 @@ document.addEventListener('DOMContentLoaded', function() {
         let gameStarted = false;
         let isPaused = false;
         
+        // Sistema de Puntos
+        const gameScore = {
+            current: 0,
+            combo: 0,
+            highScore: localStorage.getItem('highScore') || 0,
+            lastHitTime: 0,
+            comboTimeWindow: 3000, // ventana de tiempo para mantener combo (ms)
+            pointsPerHit: 10,
+            comboMultiplier: 1.5,
+            healthBonus: 0.5,
+            dodgePoints: 5
+        };
+        
+        // Array para animaciones de puntos
+        const pointPopups = [];
+        
         const images = {
             background: new Image(),
             player: new Image(),
@@ -266,7 +301,9 @@ document.addEventListener('DOMContentLoaded', function() {
             direction: 1,
             attackCooldown: 2,
             attackSpeed: 4,
-            name: "Tata"
+            name: "Tata",
+            dodged: false,
+            lastDodgeTime: 0
         };
         
         const enemy = {
@@ -463,9 +500,15 @@ document.addEventListener('DOMContentLoaded', function() {
             enemy.direction = -1;
             
             projectiles.length = 0;
+            pointPopups.length = 0;
             gameOver = false;
             gameWon = false;
             isPaused = false;
+            
+            // Resetear sistema de puntos
+            gameScore.current = 0;
+            gameScore.combo = 0;
+            gameScore.lastHitTime = 0;
         }
         
         function createProjectile(isPlayer, x, y, direction) {
@@ -493,6 +536,53 @@ document.addEventListener('DOMContentLoaded', function() {
             };
             
             projectiles.push(projectile);
+        }
+        
+        // Sistema de animación de puntos
+        function createPointPopup(x, y, points, isCombo = false) {
+            const popup = {
+                x: x,
+                y: y,
+                points: points,
+                opacity: 1,
+                age: 0,
+                isCombo: isCombo
+            };
+            
+            pointPopups.push(popup);
+        }
+        
+        function updatePointPopups() {
+            for (let i = pointPopups.length - 1; i >= 0; i--) {
+                const popup = pointPopups[i];
+                
+                popup.age += 16; // Aproximadamente 16ms por frame a 60fps
+                popup.y -= 1;
+                
+                if (popup.age > 1000) { // Duración de 1 segundo
+                    pointPopups.splice(i, 1);
+                }
+            }
+        }
+        
+        function drawPointPopups() {
+            pointPopups.forEach(popup => {
+                const opacity = 1 - (popup.age / 1000);
+                
+                ctx.save();
+                if (popup.isCombo) {
+                    ctx.fillStyle = `rgba(255, 0, 255, ${opacity})`;
+                    ctx.font = '24px PressStart2P';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`x${popup.points} COMBO!`, popup.x, popup.y);
+                } else {
+                    ctx.fillStyle = `rgba(255, 255, 0, ${opacity})`;
+                    ctx.font = '20px PressStart2P';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`+${popup.points}`, popup.x, popup.y);
+                }
+                ctx.restore();
+            });
         }
         
         function updatePlayer() {
@@ -523,6 +613,31 @@ document.addEventListener('DOMContentLoaded', function() {
             player.x += player.velX;
             player.y += player.velY;
             
+            // Comprobar si el jugador está esquivando (saltando sobre un proyectil)
+            if (player.isJumping) {
+                projectiles.forEach(p => {
+                    if (!p.isPlayer && 
+                        Math.abs(p.x - player.x) < 100 && 
+                        player.y + player.height < p.y && 
+                        !player.dodged) {
+                        
+                        // El jugador ha esquivado un proyectil
+                        player.dodged = true;
+                        player.lastDodgeTime = Date.now();
+                        
+                        // Otorgar puntos por esquivar
+                        const dodgeScore = gameScore.dodgePoints;
+                        gameScore.current += dodgeScore;
+                        createPointPopup(player.x + player.width/2, player.y - 20, dodgeScore);
+                    }
+                });
+            }
+            
+            // Resetear el estado de esquiva después de un tiempo
+            if (player.dodged && Date.now() - player.lastDodgeTime > 1000) {
+                player.dodged = false;
+            }
+            
             if (player.y >= GROUND_Y) {
                 player.y = GROUND_Y;
                 player.velY = 0;
@@ -531,6 +646,11 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (player.x < 0) player.x = 0;
             if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+            
+            // Actualizar sistema de combos
+            if (gameScore.combo > 0 && Date.now() - gameScore.lastHitTime > gameScore.comboTimeWindow) {
+                gameScore.combo = 0;
+            }
         }
         
         function updateEnemy() {
@@ -586,6 +706,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     player.health -= p.damage;
                     projectiles.splice(i, 1);
                     
+                    // Resetear combo cuando el jugador es golpeado
+                    gameScore.combo = 0;
+                    
                     if (player.health <= 0) {
                         gameOver = true;
                     }
@@ -597,8 +720,46 @@ document.addEventListener('DOMContentLoaded', function() {
                     enemy.health -= p.damage;
                     projectiles.splice(i, 1);
                     
+                    // Incrementar combo y última vez que se dio un golpe
+                    gameScore.combo++;
+                    gameScore.lastHitTime = Date.now();
+                    
+                    // Calcular puntos base más bonificación por combo
+                    let points = gameScore.pointsPerHit;
+                    if (gameScore.combo > 1) {
+                        points = Math.floor(points * (1 + (gameScore.combo * 0.1)));
+                    }
+                    
+                    // Actualizar puntuación
+                    gameScore.current += points;
+                    
+                    // Crear animación de puntos
+                    createPointPopup(
+                        enemy.x + enemy.width/2, 
+                        enemy.y - enemy.height/2, 
+                        points
+                    );
+                    
+                    // Si el combo es mayor a 2, mostrar texto de combo
+                    if (gameScore.combo >= 3) {
+                        createPointPopup(
+                            enemy.x + enemy.width/2, 
+                            enemy.y - enemy.height/2 - 30, 
+                            gameScore.combo,
+                            true
+                        );
+                    }
+                    
                     if (enemy.health <= 0) {
                         gameWon = true;
+                        // Bonificación por salud restante
+                        const healthBonus = Math.floor(player.health * gameScore.healthBonus);
+                        gameScore.current += healthBonus;
+                        createPointPopup(
+                            player.x + player.width/2, 
+                            player.y - 60, 
+                            healthBonus
+                        );
                     }
                     
                     continue;
@@ -632,7 +793,7 @@ document.addEventListener('DOMContentLoaded', function() {
             ctx.fillStyle = 'white';
             ctx.font = '16px PressStart2P';
             ctx.textAlign = flip ? 'right' : 'left';
-            ctx.fillText(name, flip ? x + width : x, y - 2);
+            ctx.fillText(name, flip ? x + width : x, y - 4);
             
             ctx.fillStyle = '#000';
             ctx.fillRect(x - padding, y - padding, width + padding * 2, height + padding * 2);
@@ -653,6 +814,27 @@ document.addEventListener('DOMContentLoaded', function() {
        //       }
        //   }
             
+            ctx.restore();
+        }
+        
+        function drawScore() {
+            ctx.save();
+            ctx.fillStyle = 'white';
+            ctx.font = '20px PressStart2P';
+            ctx.textAlign = 'left';
+            ctx.fillText(`PUNTOS: ${gameScore.current}`, 20, 85);
+            
+            // Mostrar récord
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#FFD700'; // Dorado para el récord
+            ctx.fillText(`RÉCORD: ${gameScore.highScore}`, canvas.width - 20, 540);
+            
+            // Mostrar combo actual si es mayor que 1
+            if (gameScore.combo > 1) {
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#FF00FF'; // Magenta para el combo
+                ctx.fillText(`COMBO x${gameScore.combo}`, canvas.width / 2, 60);
+            }
             ctx.restore();
         }
         
@@ -736,13 +918,34 @@ document.addEventListener('DOMContentLoaded', function() {
             ctx.textAlign = 'center';
             
             if (gameWon) {
-                ctx.fillText('¡Victoria!', canvas.width/2, canvas.height/2);
+                ctx.fillText('¡Victoria!', canvas.width/2, canvas.height/2 - 80);
             } else {
-                ctx.fillText('Game Over', canvas.width/2, canvas.height/2);
+                ctx.fillText('Game Over', canvas.width/2, canvas.height/2 - 80);
             }
             
+            // Mostrar puntuación final
             ctx.font = '25px PressStart2P';
-            ctx.fillText('Presiona R para reiniciar', canvas.width/2, canvas.height/2 + 60);
+            ctx.fillText(`Puntuación: ${gameScore.current}`, canvas.width/2, canvas.height/2 - 20);
+            
+            // Comprobar si hay una nueva puntuación máxima
+            let newHighScore = false;
+            if (gameWon && gameScore.current > gameScore.highScore) {
+                gameScore.highScore = gameScore.current;
+                localStorage.setItem('highScore', gameScore.highScore);
+                newHighScore = true;
+            }
+            
+            // Mostrar récord
+            if (newHighScore) {
+                ctx.fillStyle = '#FFD700'; // Dorado para nuevo récord
+                ctx.fillText('¡NUEVO RÉCORD!', canvas.width/2, canvas.height/2 + 20);
+            } else {
+                ctx.fillStyle = '#FFD700';
+                ctx.fillText(`Récord: ${gameScore.highScore}`, canvas.width/2, canvas.height/2 + 20);
+            }
+            
+            ctx.fillStyle = 'white';
+            ctx.fillText('Presiona R para reiniciar', canvas.width/2, canvas.height/2 + 80);
         }
         
         function drawScene() {
@@ -751,8 +954,11 @@ document.addEventListener('DOMContentLoaded', function() {
             ctx.fillStyle = 'rgba(51, 51, 51, 0.7)';
             ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
             
-            drawHealthBar(20, 20, 200, player.health, player.maxHealth, player.name);
-            drawHealthBar(canvas.width - 220, 20, 200, enemy.health, enemy.maxHealth, enemy.name, true);
+            drawHealthBar(20, 40, 200, player.health, player.maxHealth, player.name);
+            drawHealthBar(canvas.width - 220, 40, 200, enemy.health, enemy.maxHealth, enemy.name, true);
+            
+            // Dibujar puntuación
+            drawScore();
         }
         
         function gameLoop() {
@@ -764,6 +970,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 drawPlayer();
                 drawEnemy();
                 drawProjectiles();
+                drawPointPopups();
                 drawGameOver();
                 
                 if (keys['r'] || keys['R']) {
@@ -773,15 +980,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 drawPlayer();
                 drawEnemy();
                 drawProjectiles();
+                drawPointPopups();
                 drawPauseMenu();
             } else {
                 updatePlayer();
                 updateEnemy();
                 updateProjectiles();
+                updatePointPopups();
                 
                 drawPlayer();
                 drawEnemy();
                 drawProjectiles();
+                drawPointPopups();
             }
             
             requestAnimationFrame(gameLoop);
@@ -790,6 +1000,12 @@ document.addEventListener('DOMContentLoaded', function() {
         function startGame() {
             if (!gameStarted) {
                 gameStarted = true;
+                
+                // Cargar récord guardado
+                if (localStorage.getItem('highScore')) {
+                    gameScore.highScore = parseInt(localStorage.getItem('highScore'));
+                }
+                
                 setDifficulty(1);
                 gameLoop();
             }
