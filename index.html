@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Super Tata</title>
+    <title>Tata vs Javo - Juego de Pelea</title>
     <style>
         @font-face {
             font-family: 'PressStart2P';
@@ -15,21 +15,23 @@
             align-items: center;
             background-color: #222;
             color: white;
-            font-family: Arial, sans-serif;
+            font-family: 'PressStart2P', Arial, sans-serif;
             padding: 20px;
+            margin: 0;
         }
         canvas {
             border: 3px solid #444;
             margin-bottom: 20px;
             width: 900px;
             height: 540px;
+            image-rendering: pixelated;
         }
         .controls {
             background-color: #333;
             padding: 15px;
             border-radius: 10px;
             margin-bottom: 20px;
-            width: px;
+            width: 800px;
             text-align: center;
         }
         .difficulty-buttons {
@@ -46,6 +48,7 @@
             border-radius: 5px;
             cursor: pointer;
             font-size: 18px;
+            font-family: 'PressStart2P', Arial, sans-serif;
         }
         button:hover {
             background-color: #45a049;
@@ -59,7 +62,7 @@
             font-size: 18px;
             margin-top: 10px;
             color: red;
-            max-width: px;
+            max-width: 800px;
             text-align: center;
         }
         h1 {
@@ -90,25 +93,20 @@
             background-color: rgba(120, 120, 120, 0.7);
         }
         @media (max-width: 900px) {
-            #mobileControls {
-                display: block;
-            }
-            canvas, .controls {
-                width: 100%;
-            }
+            #mobileControls { display: block; }
+            canvas, .controls { width: 100%; }
         }
     </style>
 </head>
 <body>
-    <h1></h1>
-    
+    <h1>Tata vs Javo</h1>
     <canvas id="gameCanvas" width="900" height="540"></canvas>
     <div id="loadingMessage">Cargando imágenes...</div>
     <div id="errorMessage"></div>
     
     <div class="controls">
         <strong style="font-size: 22px;">Controles:</strong> 
-        <p style="font-size: 18px;">Flechas ← → para moverse | Flecha ↑ para saltar | Tecla Z para atacar</p>
+        <p style="font-size: 18px;">Flechas ← → para moverse | Flecha ↑ para saltar | Tecla Z para atacar | P o ESC para pausar</p>
         <div class="difficulty-buttons">
             <button id="easyBtn">Nivel Fácil</button>
             <button id="mediumBtn">Nivel Medio</button>
@@ -140,6 +138,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let gameOver = false;
     let gameWon = false;
     let gameStarted = false;
+    let isPaused = false;
     
     const images = {
         background: new Image(),
@@ -167,6 +166,48 @@ document.addEventListener('DOMContentLoaded', function() {
     let imagesFailed = 0;
     const totalImages = Object.keys(images).length;
     
+    const player = {
+        x: 100,
+        y: GROUND_Y,
+        width: 100,
+        height: 100,
+        speed: 5,
+        jumpForce: 16,
+        velX: 0,
+        velY: 0,
+        health: 800,
+        maxHealth: 800,
+        isJumping: false,
+        direction: 1,
+        attackCooldown: 2,
+        attackSpeed: 4,
+        name: "Tata"
+    };
+    
+    const enemy = {
+        x: 500,
+        y: GROUND_Y,
+        width: 150,
+        height: 150,
+        speed: 5,
+        jumpForce: 16,
+        velX: 0,
+        velY: 0,
+        health: 800,
+        maxHealth: 800,
+        isJumping: false,
+        direction: -1,
+        attackCooldown: 2,
+        attackSpeed: 4,
+        thinkTimer: 0,
+        attackChance: 0.06,
+        jumpChance: 0.04,
+        name: "Javo"
+    };
+    
+    const projectiles = [];
+    const keys = {};
+    
     function handleImageLoad() {
         imagesLoaded++;
         checkAllImagesLoaded();
@@ -178,10 +219,57 @@ document.addEventListener('DOMContentLoaded', function() {
         checkAllImagesLoaded();
     }
     
+    Object.values(images).forEach(img => {
+        img.onload = handleImageLoad;
+        img.onerror = handleImageError;
+    });
+    
+    window.addEventListener('keydown', (e) => {
+        keys[e.key] = true;
+        
+        // Manejar pausa
+        if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
+            if (!gameOver && !gameWon) {
+                isPaused = !isPaused;
+            }
+        }
+    });
+    
+    window.addEventListener('keyup', (e) => {
+        keys[e.key] = false;
+    });
+    
+    function setupControl(id, keyMapping) {
+        const element = document.getElementById(id);
+        const startAction = () => keys[keyMapping] = true;
+        const endAction = () => keys[keyMapping] = false;
+        
+        element.addEventListener('mousedown', startAction);
+        element.addEventListener('mouseup', endAction);
+        element.addEventListener('mouseleave', endAction);
+        element.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startAction();
+        });
+        element.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            endAction();
+        });
+    }
+
+    setupControl('leftBtn', 'ArrowLeft');
+    setupControl('rightBtn', 'ArrowRight');
+    setupControl('jumpBtn', 'ArrowUp');
+    setupControl('attackBtn', 'z');
+    
+    document.getElementById('easyBtn').addEventListener('click', () => setDifficulty(1));
+    document.getElementById('mediumBtn').addEventListener('click', () => setDifficulty(2));
+    document.getElementById('hardBtn').addEventListener('click', () => setDifficulty(3));
+    
     function checkAllImagesLoaded() {
         if (imagesLoaded + imagesFailed === totalImages) {
             if (imagesFailed > 0) {
-                errorMessage.textContent = `No se pudieron cargar ${imagesFailed} imágenes. Asegúrate de que los archivos de imagen estén en la misma carpeta que este archivo HTML.`;
+                errorMessage.textContent = `No se pudieron cargar ${imagesFailed} imágenes. Usando gráficos de respaldo.`;
                 createFallbackGraphics();
             }
             loadingMessage.style.display = 'none';
@@ -230,88 +318,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!images.enemyLose.complete) images.enemyLose = createFallbackImage('pink', 200, 300, "lose");
     }
     
-    Object.values(images).forEach(img => {
-        img.onload = handleImageLoad;
-        img.onerror = handleImageError;
-    });
-    
-    const player = {
-        x: 100,
-        y: GROUND_Y,
-        width: 150,
-        height: 150,
-        speed: 5,
-        jumpForce: 17,
-        velX: 0,
-        velY: 0,
-        health: 800,
-        maxHealth: 800,
-        isJumping: false,
-        direction: 1,
-        attackCooldown: 2,
-        attackSpeed: 4,
-        name: "Tata"
-    };
-    
-    const enemy = {
-        x: 500,
-        y: GROUND_Y,
-        width: 200,
-        height: 200,
-        speed: 4,
-        jumpForce: 17,
-        velX: 0,
-        velY: 0,
-        health: 1000,
-        maxHealth: 1000,
-        isJumping: false,
-        direction: -1,
-        attackCooldown: 2,
-        attackSpeed: 4,
-        thinkTimer: 0,
-        attackChance: 0.09,
-        jumpChance: 0.09,
-        name: "Javo"
-    };
-    
-    const projectiles = [];
-    const keys = {};
-    
-    window.addEventListener('keydown', (e) => {
-        keys[e.key] = true;
-    });
-    
-    window.addEventListener('keyup', (e) => {
-        keys[e.key] = false;
-    });
-    
-    function setupControl(id, keyMapping) {
-        const element = document.getElementById(id);
-        const startAction = () => keys[keyMapping] = true;
-        const endAction = () => keys[keyMapping] = false;
-        
-        element.addEventListener('mousedown', startAction);
-        element.addEventListener('mouseup', endAction);
-        element.addEventListener('mouseleave', endAction);
-        element.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            startAction();
-        });
-        element.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            endAction();
-        });
-    }
-
-    setupControl('leftBtn', 'ArrowLeft');
-    setupControl('rightBtn', 'ArrowRight');
-    setupControl('jumpBtn', 'ArrowUp');
-    setupControl('attackBtn', 'z');
-    
-    document.getElementById('easyBtn').addEventListener('click', () => setDifficulty(1));
-    document.getElementById('mediumBtn').addEventListener('click', () => setDifficulty(2));
-    document.getElementById('hardBtn').addEventListener('click', () => setDifficulty(3));
-    
     function setDifficulty(level) {
         difficulty = level;
         resetGame();
@@ -319,24 +325,24 @@ document.addEventListener('DOMContentLoaded', function() {
         switch(level) {
             case 1:
                 enemy.speed = 3;
-                enemy.health = 1000;
-                enemy.maxHealth = 1000;
-                enemy.attackChance = 0.01;
-                enemy.jumpChance = 0.005;
+                enemy.health = 800;
+                enemy.maxHealth = 800;
+                enemy.attackChance = 0.02;
+                enemy.jumpChance = 0.025;
                 break;
             case 2:
                 enemy.speed = 4;
-                enemy.health = 1500;
-                enemy.maxHealth = 1500;
-                enemy.attackChance = 0.02;
-                enemy.jumpChance = 0.01;
+                enemy.health = 1200;
+                enemy.maxHealth = 1200;
+                enemy.attackChance = 0.04;
+                enemy.jumpChance = 0.04;
                 break;
             case 3:
-                enemy.speed = 5;
-                enemy.health = 2000;
-                enemy.maxHealth = 2000;
-                enemy.attackChance = 0.06;
-                enemy.jumpChance = 0.1;
+                enemy.speed = 6;
+                enemy.health = 1800;
+                enemy.maxHealth = 1800;
+                enemy.attackChance = 0.09;
+                enemy.jumpChance = 0.08;
                 break;
         }
     }
@@ -359,6 +365,7 @@ document.addEventListener('DOMContentLoaded', function() {
         projectiles.length = 0;
         gameOver = false;
         gameWon = false;
+        isPaused = false;
     }
     
     function createProjectile(isPlayer, x, y, direction) {
@@ -516,7 +523,7 @@ document.addEventListener('DOMContentLoaded', function() {
                a.y < bY + bHeight &&
                a.y + a.height > bY;
     }
-
+    
     function drawHealthBar(x, y, width, health, maxHealth, name, flip = false) {
         const height = 20;
         const padding = 2;
@@ -547,6 +554,19 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         ctx.restore();
+    }
+    
+    function drawPauseMenu() {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = 'white';
+        ctx.font = '40px PressStart2P';
+        ctx.textAlign = 'center';
+        ctx.fillText('PAUSA', canvas.width/2, canvas.height/2);
+        
+        ctx.font = '20px PressStart2P';
+        ctx.fillText('Presiona P o ESC para continuar', canvas.width/2, canvas.height/2 + 50);
     }
     
     function drawPlayer() {
@@ -607,16 +627,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    function drawScene() {
-        ctx.drawImage(images.background, 0, 0, canvas.width, canvas.height);
-        
-        ctx.fillStyle = 'rgba(51, 51, 51, 0.7)';
-        ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
-        
-        drawHealthBar(20, 20, 200, player.health, player.maxHealth, player.name);
-        drawHealthBar(canvas.width - 220, 20, 200, enemy.health, enemy.maxHealth, enemy.name, true);
-    }
-    
     function drawGameOver() {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -635,12 +645,36 @@ document.addEventListener('DOMContentLoaded', function() {
         ctx.fillText('Presiona R para reiniciar', canvas.width/2, canvas.height/2 + 60);
     }
     
+    function drawScene() {
+        ctx.drawImage(images.background, 0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = 'rgba(51, 51, 51, 0.7)';
+        ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+        
+        drawHealthBar(20, 20, 200, player.health, player.maxHealth, player.name);
+        drawHealthBar(canvas.width - 220, 20, 200, enemy.health, enemy.maxHealth, enemy.name, true);
+    }
+    
     function gameLoop() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
         drawScene();
         
-        if (!gameOver && !gameWon) {
+        if (gameOver || gameWon) {
+            drawPlayer();
+            drawEnemy();
+            drawProjectiles();
+            drawGameOver();
+            
+            if (keys['r'] || keys['R']) {
+                resetGame();
+            }
+        } else if (isPaused) {
+            drawPlayer();
+            drawEnemy();
+            drawProjectiles();
+            drawPauseMenu();
+        } else {
             updatePlayer();
             updateEnemy();
             updateProjectiles();
@@ -648,16 +682,6 @@ document.addEventListener('DOMContentLoaded', function() {
             drawPlayer();
             drawEnemy();
             drawProjectiles();
-        } else {
-            drawPlayer();
-            drawEnemy();
-            drawProjectiles();
-            
-            drawGameOver();
-            
-            if (keys['r'] || keys['R']) {
-                resetGame();
-            }
         }
         
         requestAnimationFrame(gameLoop);
