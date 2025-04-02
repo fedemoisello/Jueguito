@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego de Pelea Simple</title>
+    <style>
+        @font-face {
+            font-family: 'PressStart2P';
+            src: url('https://fonts.gstatic.com/s/pressstart2p/v15/e3t4euO8T-267oIAQAu6jDQyK3nVivM.woff2') format('woff2');
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #222;
+            color: white;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        canvas {
+            border: 3px solid #444;
+            margin-bottom: 20px;
+            width: 800px;
+            height: 480px;
+        }
+        .controls {
+            background-color: #333;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            width: 800px;
+            text-align: center;
+        }
+        .difficulty-buttons {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+        button {
+            padding: 15px 30px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #loadingMessage {
+            font-size: 24px;
+            margin-top: 20px;
+            color: yellow;
+        }
+        #errorMessage {
+            font-size: 18px;
+            margin-top: 10px;
+            color: red;
+            max-width: 800px;
+            text-align: center;
+        }
+        h1 {
+            font-size: 36px;
+        }
+        #mobileControls {
+            display: none;
+            width: 800px;
+            margin: 20px auto;
+            text-align: center;
+        }
+        .mobileButton {
+            display: inline-block;
+            width: 70px;
+            height: 70px;
+            margin: 10px;
+            background-color: rgba(70, 70, 70, 0.7);
+            border: 2px solid #888;
+            border-radius: 50%;
+            font-size: 30px;
+            color: white;
+            text-align: center;
+            line-height: 70px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .mobileButton:active {
+            background-color: rgba(120, 120, 120, 0.7);
+        }
+        @media (max-width: 800px) {
+            #mobileControls {
+                display: block;
+            }
+            canvas, .controls {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Juego de Pelea Simple</h1>
+    
+    <canvas id="gameCanvas" width="800" height="480"></canvas>
+    <div id="loadingMessage">Cargando imágenes...</div>
+    <div id="errorMessage"></div>
+    
+    <div class="controls">
+        <strong style="font-size: 22px;">Controles:</strong> 
+        <p style="font-size: 18px;">Flechas ← → para moverse | Flecha ↑ para saltar | Tecla Z para atacar</p>
+        <div class="difficulty-buttons">
+            <button id="easyBtn">Nivel Fácil</button>
+            <button id="mediumBtn">Nivel Medio</button>
+            <button id="hardBtn">Nivel Difícil</button>
+        </div>
+    </div>
+    
+    <div id="mobileControls">
+        <div class="mobileButton" id="leftBtn">←</div>
+        <div class="mobileButton" id="jumpBtn">↑</div>
+        <div class="mobileButton" id="rightBtn">→</div>
+        <div class="mobileButton" id="attackBtn">⚔️</div>
+    </div>
+
+    <script>
+document.addEventListener('DOMContentLoaded', function() {
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const loadingMessage = document.getElementById('loadingMessage');
+    const errorMessage = document.getElementById('errorMessage');
+    
+    canvas.width = 800;
+    canvas.height = 480;
+    
+    const GRAVITY = 0.5;
+    const GROUND_Y = canvas.height - 30;
+    
+    let difficulty = 1;
+    let gameOver = false;
+    let gameWon = false;
+    let gameStarted = false;
+    
+    const images = {
+        background: new Image(),
+        player: new Image(),
+        enemy: new Image(),
+        sword: new Image(),
+        saw: new Image(),
+        playerWin: new Image(),
+        playerLose: new Image(),
+        enemyWin: new Image(),
+        enemyLose: new Image()
+    };
+    
+    images.background.src = 'background.png';
+    images.player.src = 'player.png';
+    images.enemy.src = 'enemy.png';
+    images.sword.src = 'sword.png';
+    images.saw.src = 'chainsaw.png';
+    images.playerWin.src = 'playerwin.png';
+    images.playerLose.src = 'playerlose.png';
+    images.enemyWin.src = 'enemywin.png';
+    images.enemyLose.src = 'enemylose.png';
+    
+    let imagesLoaded = 0;
+    let imagesFailed = 0;
+    const totalImages = Object.keys(images).length;
+    
+    function handleImageLoad() {
+        imagesLoaded++;
+        checkAllImagesLoaded();
+    }
+    
+    function handleImageError(e) {
+        imagesFailed++;
+        console.error(`Error al cargar imagen: ${e.target.src}`);
+        checkAllImagesLoaded();
+    }
+    
+    function checkAllImagesLoaded() {
+        if (imagesLoaded + imagesFailed === totalImages) {
+            if (imagesFailed > 0) {
+                errorMessage.textContent = `No se pudieron cargar ${imagesFailed} imágenes. Asegúrate de que los archivos de imagen estén en la misma carpeta que este archivo HTML.`;
+                createFallbackGraphics();
+            }
+            loadingMessage.style.display = 'none';
+            startGame();
+        }
+    }
+    
+    function createFallbackGraphics() {
+        function createFallbackImage(color, width, height, type) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = width;
+            tempCanvas.height = height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.fillStyle = color;
+            tempCtx.fillRect(0, 0, width, height);
+            
+            if (type === "character" || type === "win" || type === "lose") {
+                tempCtx.fillStyle = 'white';
+                tempCtx.fillRect(width * 0.3, height * 0.2, width * 0.15, height * 0.15);
+                tempCtx.fillRect(width * 0.6, height * 0.2, width * 0.15, height * 0.15);
+                
+                if (type === "character" || type === "win") {
+                    tempCtx.beginPath();
+                    tempCtx.arc(width * 0.5, height * 0.6, width * 0.2, 0, Math.PI);
+                    tempCtx.stroke();
+                } else {
+                    tempCtx.beginPath();
+                    tempCtx.arc(width * 0.5, height * 0.7, width * 0.2, Math.PI, 2 * Math.PI);
+                    tempCtx.stroke();
+                }
+            }
+            
+            const img = new Image();
+            img.src = tempCanvas.toDataURL();
+            return img;
+        }
+        
+        if (!images.background.complete) images.background = createFallbackImage('#000', 800, 480, "background");
+        if (!images.player.complete) images.player = createFallbackImage('blue', 200, 300, "character");
+        if (!images.enemy.complete) images.enemy = createFallbackImage('red', 200, 300, "character");
+        if (!images.sword.complete) images.sword = createFallbackImage('lightblue', 100, 100, "weapon");
+        if (!images.saw.complete) images.saw = createFallbackImage('orange', 100, 100, "weapon");
+        if (!images.playerWin.complete) images.playerWin = createFallbackImage('lightblue', 200, 300, "win");
+        if (!images.playerLose.complete) images.playerLose = createFallbackImage('darkblue', 200, 300, "lose");
+        if (!images.enemyWin.complete) images.enemyWin = createFallbackImage('darkred', 200, 300, "win");
+        if (!images.enemyLose.complete) images.enemyLose = createFallbackImage('pink', 200, 300, "lose");
+    }
+    
+    Object.values(images).forEach(img => {
+        img.onload = handleImageLoad;
+        img.onerror = handleImageError;
+    });
+    
+    const player = {
+        x: 100,
+        y: GROUND_Y,
+        width: 150,
+        height: 150,
+        speed: 5,
+        jumpForce: 17,
+        velX: 0,
+        velY: 0,
+        health: 800,
+        maxHealth: 800,
+        isJumping: false,
+        direction: 1,
+        attackCooldown: 2,
+        attackSpeed: 4,
+        name: "Tata"
+    };
+    
+    const enemy = {
+        x: 500,
+        y: GROUND_Y,
+        width: 200,
+        height: 200,
+        speed: 4,
+        jumpForce: 17,
+        velX: 0,
+        velY: 0,
+        health: 1000,
+        maxHealth: 1000,
+        isJumping: false,
+        direction: -1,
+        attackCooldown: 2,
+        attackSpeed: 4,
+        thinkTimer: 0,
+        attackChance: 0.09,
+        jumpChance: 0.09,
+        name: "Javo"
+    };
+    
+    const projectiles = [];
+    const keys = {};
+    
+    window.addEventListener('keydown', (e) => {
+        keys[e.key] = true;
+    });
+    
+    window.addEventListener('keyup', (e) => {
+        keys[e.key] = false;
+    });
+    
+    function setupControl(id, keyMapping) {
+        const element = document.getElementById(id);
+        const startAction = () => keys[keyMapping] = true;
+        const endAction = () => keys[keyMapping] = false;
+        
+        element.addEventListener('mousedown', startAction);
+        element.addEventListener('mouseup', endAction);
+        element.addEventListener('mouseleave', endAction);
+        element.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startAction();
+        });
+        element.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            endAction();
+        });
+    }
+
+    setupControl('leftBtn', 'ArrowLeft');
+    setupControl('rightBtn', 'ArrowRight');
+    setupControl('jumpBtn', 'ArrowUp');
+    setupControl('attackBtn', 'z');
+    
+    document.getElementById('easyBtn').addEventListener('click', () => setDifficulty(1));
+    document.getElementById('mediumBtn').addEventListener('click', () => setDifficulty(2));
+    document.getElementById('hardBtn').addEventListener('click', () => setDifficulty(3));
+    
+    function setDifficulty(level) {
+        difficulty = level;
+        resetGame();
+        
+        switch(level) {
+            case 1:
+                enemy.speed = 3;
+                enemy.health = 1000;
+                enemy.maxHealth = 1000;
+                enemy.attackChance = 0.01;
+                enemy.jumpChance = 0.005;
+                break;
+            case 2:
+                enemy.speed = 4;
+                enemy.health = 1500;
+                enemy.maxHealth = 1500;
+                enemy.attackChance = 0.02;
+                enemy.jumpChance = 0.01;
+                break;
+            case 3:
+                enemy.speed = 5;
+                enemy.health = 2000;
+                enemy.maxHealth = 2000;
+                enemy.attackChance = 0.06;
+                enemy.jumpChance = 0.1;
+                break;
+        }
+    }
+    
+    function resetGame() {
+        player.x = 100;
+        player.y = GROUND_Y;
+        player.health = player.maxHealth;
+        player.velX = 0;
+        player.velY = 0;
+        player.direction = 1;
+        
+        enemy.x = 600;
+        enemy.y = GROUND_Y;
+        enemy.health = enemy.maxHealth;
+        enemy.velX = 0;
+        enemy.velY = 0;
+        enemy.direction = -1;
+        
+        projectiles.length = 0;
+        gameOver = false;
+        gameWon = false;
+    }
+    
+    function createProjectile(isPlayer, x, y, direction) {
+        const projY = isPlayer ? 
+                      (player.y - player.height/2.5) : 
+                      (enemy.y - enemy.height/2.5);
+        
+        let projectileDirection;
+        if (isPlayer) {
+            projectileDirection = direction;
+        } else {
+            projectileDirection = (player.x < enemy.x) ? -1 : 1;
+        }
+        
+        const projectile = {
+            x: x,
+            y: projY,
+            width: 100,
+            height: 100,
+            velX: projectileDirection * (isPlayer ? player.attackSpeed : enemy.attackSpeed),
+            damage: isPlayer ? 20 : 15 + (difficulty * 5),
+            isPlayer: isPlayer,
+            rotation: 0,
+            rotationSpeed: isPlayer ? 0.05 : 0.05
+        };
+        
+        projectiles.push(projectile);
+    }
+    
+    function updatePlayer() {
+        player.velX = 0;
+        
+        if (keys['ArrowLeft']) {
+            player.velX = -player.speed;
+            player.direction = -1;
+        }
+        if (keys['ArrowRight']) {
+            player.velX = player.speed;
+            player.direction = 1;
+        }
+        if (keys['ArrowUp'] && !player.isJumping) {
+            player.velY = -player.jumpForce;
+            player.isJumping = true;
+        }
+        if (keys['z'] && player.attackCooldown <= 0) {
+            createProjectile(true, player.x + (player.direction > 0 ? player.width : 0), player.y, player.direction);
+            player.attackCooldown = 25;
+        }
+        
+        if (player.attackCooldown > 0) {
+            player.attackCooldown--;
+        }
+        
+        player.velY += GRAVITY;
+        player.x += player.velX;
+        player.y += player.velY;
+        
+        if (player.y >= GROUND_Y) {
+            player.y = GROUND_Y;
+            player.velY = 0;
+            player.isJumping = false;
+        }
+        
+        if (player.x < 0) player.x = 0;
+        if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+    }
+    
+    function updateEnemy() {
+        enemy.thinkTimer++;
+        
+        const distanceToPlayer = player.x - enemy.x;
+        const direction = Math.sign(distanceToPlayer);
+        
+        enemy.direction = -direction;
+        
+        if (Math.abs(distanceToPlayer) > 300) {
+            enemy.velX = enemy.speed * direction;
+        } else {
+            enemy.velX = 0;
+            
+            if (!enemy.isJumping && Math.random() < enemy.jumpChance) {
+                enemy.velY = -enemy.jumpForce;
+                enemy.isJumping = true;
+            }
+            
+            if (enemy.attackCooldown <= 0 && Math.random() < enemy.attackChance) {
+                createProjectile(false, enemy.x + (player.x < enemy.x ? 0 : enemy.width), enemy.y, (player.x < enemy.x ? -1 : 1));
+                enemy.attackCooldown = 35;
+            }
+        }
+        
+        if (enemy.attackCooldown > 0) {
+            enemy.attackCooldown--;
+        }
+        
+        enemy.velY += GRAVITY;
+        enemy.x += enemy.velX;
+        enemy.y += enemy.velY;
+        
+        if (enemy.y >= GROUND_Y) {
+            enemy.y = GROUND_Y;
+            enemy.velY = 0;
+            enemy.isJumping = false;
+        }
+        
+        if (enemy.x < 0) enemy.x = 0;
+        if (enemy.x + enemy.width > canvas.width) enemy.x = canvas.width - enemy.width;
+    }
+    
+    function updateProjectiles() {
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            const p = projectiles[i];
+            
+            p.x += p.velX;
+            p.rotation += p.rotationSpeed;
+            
+            if (!p.isPlayer && isColliding(p, player)) {
+                player.health -= p.damage;
+                projectiles.splice(i, 1);
+                
+                if (player.health <= 0) {
+                    gameOver = true;
+                }
+                
+                continue;
+            }
+            
+            if (p.isPlayer && isColliding(p, enemy)) {
+                enemy.health -= p.damage;
+                projectiles.splice(i, 1);
+                
+                if (enemy.health <= 0) {
+                    gameWon = true;
+                }
+                
+                continue;
+            }
+            
+            if (p.x < -150 || p.x > canvas.width + 150) {
+                projectiles.splice(i, 1);
+            }
+        }
+    }
+
+    function isColliding(a, b) {
+        let bY = b.y;
+        let bHeight = b.height;
+        
+        if ((b === player || b === enemy) && a.isPlayer !== undefined) {
+            bY = b.y - b.height;
+        }
+        
+        return a.x < b.x + b.width &&
+               a.x + a.width > b.x &&
+               a.y < bY + bHeight &&
+               a.y + a.height > bY;
+    }
+
+    function drawHealthBar(x, y, width, health, maxHealth, name, flip = false) {
+        const height = 20;
+        const padding = 2;
+        
+        ctx.save();
+        ctx.fillStyle = 'white';
+        ctx.font = '16px PressStart2P';
+        ctx.textAlign = flip ? 'right' : 'left';
+        ctx.fillText(name, flip ? x + width : x, y - 5);
+        
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x - padding, y - padding, width + padding * 2, height + padding * 2);
+        
+        ctx.fillStyle = '#333';
+        ctx.fillRect(x, y, width, height);
+        
+        const healthWidth = (health / maxHealth) * width;
+        ctx.fillStyle = health > maxHealth * 0.5 ? '#00ff00' : health > maxHealth * 0.25 ? '#ffff00' : '#ff0000';
+        ctx.fillRect(x, y, healthWidth, height);
+        
+        // Efecto pixelado
+        for (let i = 0; i < width; i += 4) {
+            if (Math.random() > 0.7) {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(x + i, y, 2, 2);
+                ctx.fillRect(x + i, y + height - 2, 2, 2);
+            }
+        }
+        
+        ctx.restore();
+    }
+    
+    function drawPlayer() {
+        let playerImage;
+        if (gameOver) {
+            playerImage = images.playerLose;
+        } else if (gameWon) {
+            playerImage = images.playerWin;
+        } else {
+            playerImage = images.player;
+        }
+        
+        ctx.save();
+        if (player.direction < 0) {
+            ctx.scale(-1, 1);
+            ctx.drawImage(playerImage, -player.x - player.width, player.y - player.height, player.width, player.height);
+        } else {
+            ctx.drawImage(playerImage, player.x, player.y - player.height, player.width, player.height);
+        }
+        ctx.restore();
+    }
+    
+    function drawEnemy() {
+        let enemyImage;
+        if (gameOver) {
+            enemyImage = images.enemyWin;
+        } else if (gameWon) {
+            enemyImage = images.enemyLose;
+        } else {
+            enemyImage = images.enemy;
+        }
+        
+        ctx.save();
+        if (enemy.direction < 0) {
+            ctx.scale(-1, 1);
+            ctx.drawImage(enemyImage, -enemy.x - enemy.width, enemy.y - enemy.height, enemy.width, enemy.height);
+        } else {
+            ctx.drawImage(enemyImage, enemy.x, enemy.y - enemy.height, enemy.width, enemy.height);
+        }
+        ctx.restore();
+    }
+    
+    function drawProjectiles() {
+        projectiles.forEach(p => {
+            if (p.isPlayer) {
+                ctx.save();
+                ctx.translate(p.x + p.width/2, p.y + p.height/2);
+                ctx.rotate(p.rotation);
+                ctx.drawImage(images.sword, -p.width/2, -p.height/2, p.width, p.height);
+                ctx.restore();
+            } else {
+                ctx.save();
+                ctx.translate(p.x + p.width/2, p.y + p.height/2);
+                ctx.rotate(p.rotation);
+                ctx.drawImage(images.saw, -p.width/2, -p.height/2, p.width, p.height);
+                ctx.restore();
+            }
+        });
+    }
+    
+    function drawScene() {
+        ctx.drawImage(images.background, 0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = 'rgba(51, 51, 51, 0.7)';
+        ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+        
+        drawHealthBar(20, 20, 200, player.health, player.maxHealth, player.name);
+        drawHealthBar(canvas.width - 220, 20, 200, enemy.health, enemy.maxHealth, enemy.name, true);
+    }
+    
+    function drawGameOver() {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = 'white';
+        ctx.font = '40px PressStart2P';
+        ctx.textAlign = 'center';
+        
+        if (gameWon) {
+            ctx.fillText('¡Victoria!', canvas.width/2, canvas.height/2);
+        } else {
+            ctx.fillText('Game Over', canvas.width/2, canvas.height/2);
+        }
+        
+        ctx.font = '25px PressStart2P';
+        ctx.fillText('Presiona R para reiniciar', canvas.width/2, canvas.height/2 + 60);
+    }
+    
+    function gameLoop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        drawScene();
+        
+        if (!gameOver && !gameWon) {
+            updatePlayer();
+            updateEnemy();
+            updateProjectiles();
+            
+            drawPlayer();
+            drawEnemy();
+            drawProjectiles();
+        } else {
+            drawPlayer();
+            drawEnemy();
+            drawProjectiles();
+            
+            drawGameOver();
+            
+            if (keys['r'] || keys['R']) {
+                resetGame();
+            }
+        }
+        
+        requestAnimationFrame(gameLoop);
+    }
+    
+    function startGame() {
+        if (!gameStarted) {
+            gameStarted = true;
+            setDifficulty(1);
+            gameLoop();
+        }
+    }
+    
+    if (imagesLoaded === totalImages) {
+        startGame();
+    }
+});
+    </script>
+</body>
+</html>
