@@ -118,7 +118,7 @@
         <div class="mobileButton" id="leftBtn">←</div>
         <div class="mobileButton" id="jumpBtn">↑</div>
         <div class="mobileButton" id="rightBtn">→</div>
-        <div class="mobileButton" id="attackBtn">⚔️</div>
+        <div class="mobileButton" id="attackBtn">z</div>
     </div>
 
     <script>
@@ -175,8 +175,8 @@ document.addEventListener('DOMContentLoaded', function() {
         jumpForce: 16,
         velX: 0,
         velY: 0,
-        health: 800,
-        maxHealth: 800,
+        health: 500,
+        maxHealth: 500,
         isJumping: false,
         direction: 1,
         attackCooldown: 2,
@@ -193,15 +193,15 @@ document.addEventListener('DOMContentLoaded', function() {
         jumpForce: 16,
         velX: 0,
         velY: 0,
-        health: 800,
-        maxHealth: 800,
+        health: 500,
+        maxHealth: 500,
         isJumping: false,
         direction: -1,
         attackCooldown: 2,
         attackSpeed: 4,
         thinkTimer: 0,
-        attackChance: 0.06,
-        jumpChance: 0.04,
+        attackChance: 0.02,
+        jumpChance: 0.01,
         name: "Javo"
     };
     
@@ -224,13 +224,17 @@ document.addEventListener('DOMContentLoaded', function() {
         img.onerror = handleImageError;
     });
     
+    // Controles de teclado
     window.addEventListener('keydown', (e) => {
         keys[e.key] = true;
-        
-        // Manejar pausa
         if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
             if (!gameOver && !gameWon) {
                 isPaused = !isPaused;
+            }
+        }
+        if (e.key === 'r' || e.key === 'R') {
+            if (gameOver || gameWon) {
+                resetGame();
             }
         }
     });
@@ -238,9 +242,19 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('keyup', (e) => {
         keys[e.key] = false;
     });
+
+    // Prevenir scroll con flechas y espacio
+    window.addEventListener('keydown', function(e) {
+        if(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].indexOf(e.key) > -1) {
+            e.preventDefault();
+        }
+    }, false);
     
+    // Controles móviles
     function setupControl(id, keyMapping) {
         const element = document.getElementById(id);
+        if (!element) return;
+        
         const startAction = () => keys[keyMapping] = true;
         const endAction = () => keys[keyMapping] = false;
         
@@ -257,10 +271,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Configurar controles móviles
     setupControl('leftBtn', 'ArrowLeft');
     setupControl('rightBtn', 'ArrowRight');
     setupControl('jumpBtn', 'ArrowUp');
-    setupControl('attackBtn', 'z');
+    setupControl('attackBtn', 'Z');
     
     document.getElementById('easyBtn').addEventListener('click', () => setDifficulty(1));
     document.getElementById('mediumBtn').addEventListener('click', () => setDifficulty(2));
@@ -325,10 +340,10 @@ document.addEventListener('DOMContentLoaded', function() {
         switch(level) {
             case 1:
                 enemy.speed = 3;
-                enemy.health = 800;
-                enemy.maxHealth = 800;
+                enemy.health = 500;
+                enemy.maxHealth = 500;
                 enemy.attackChance = 0.02;
-                enemy.jumpChance = 0.025;
+                enemy.jumpChance = 0.01;
                 break;
             case 2:
                 enemy.speed = 4;
@@ -370,8 +385,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function createProjectile(isPlayer, x, y, direction) {
         const projY = isPlayer ? 
-                      (player.y - player.height/2.5) : 
-                      (enemy.y - enemy.height/2.5);
+                      (player.y - player.height/1.2) : 
+                      (enemy.y - enemy.height/1.2);
         
         let projectileDirection;
         if (isPlayer) {
@@ -383,13 +398,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const projectile = {
             x: x,
             y: projY,
-            width: 100,
-            height: 100,
+            width: 80,
+            height: 80,
             velX: projectileDirection * (isPlayer ? player.attackSpeed : enemy.attackSpeed),
             damage: isPlayer ? 20 : 15 + (difficulty * 5),
             isPlayer: isPlayer,
             rotation: 0,
-            rotationSpeed: isPlayer ? 0.05 : 0.05
+            rotationSpeed: isPlayer ? 0.06 : 0.06
         };
         
         projectiles.push(projectile);
@@ -441,7 +456,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         enemy.direction = -direction;
         
-        if (Math.abs(distanceToPlayer) > 300) {
+        if (Math.abs(distanceToPlayer) > 400) {
             enemy.velX = enemy.speed * direction;
         } else {
             enemy.velX = 0;
@@ -532,7 +547,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ctx.fillStyle = 'white';
         ctx.font = '16px PressStart2P';
         ctx.textAlign = flip ? 'right' : 'left';
-        ctx.fillText(name, flip ? x + width : x, y - 5);
+        ctx.fillText(name, flip ? x + width : x, y - 2);
         
         ctx.fillStyle = '#000';
         ctx.fillRect(x - padding, y - padding, width + padding * 2, height + padding * 2);
@@ -545,13 +560,13 @@ document.addEventListener('DOMContentLoaded', function() {
         ctx.fillRect(x, y, healthWidth, height);
         
         // Efecto pixelado
-        for (let i = 0; i < width; i += 4) {
-            if (Math.random() > 0.7) {
-                ctx.fillStyle = '#000';
-                ctx.fillRect(x + i, y, 2, 2);
-                ctx.fillRect(x + i, y + height - 2, 2, 2);
-            }
-        }
+   //   for (let i = 0; i < width; i += 4) {
+   //       if (Math.random() > 0.7) {
+   //           ctx.fillStyle = '#000';
+   //           ctx.fillRect(x + i, y, 2, 2);
+   //           ctx.fillRect(x + i, y + height - 2, 2, 2);
+   //       }
+   //   }
         
         ctx.restore();
     }
